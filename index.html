@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>多題目計時器</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #f0f0f0; display: flex; flex-direction: column; min-height: 100vh; }
+    #setup { padding: 24px; text-align: center; }
+    #setup input { padding: 8px 12px; font-size: 16px; width: 100px; margin-right: 8px; }
+    #setup button { padding: 8px 16px; font-size: 16px; }
+
+    .page-container { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .question { padding: 12px; background-color: white; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; font-size: 18px; transition: background-color 0.3s; }
+    .question.running { background-color: #fff7cc; }
+    .time { font-weight: bold; }
+    .footer { display: flex; justify-content: space-between; padding: 12px 16px; background-color: #fff; border-top: 1px solid #ccc; gap: 8px; }
+    button { flex: 1; padding: 10px 12px; font-size: 16px; border: none; border-radius: 8px; background-color: #007bff; color: #fff; }
+    button:disabled { background-color: #aaa; }
+    #result { background: #fff; margin: 16px; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); white-space: pre-wrap; line-height: 1.6; }
+    #downloadBtn { margin: 12px 16px; padding: 12px; background-color: #28a745; color: #fff; border: none; border-radius: 8px; width: calc(100% - 32px); font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div id="setup">
+    <label>請輸入題目總數：</label>
+    <input type="number" id="questionInput" min="1" max="999" value="20" />
+    <button id="startBtn">開始</button>
+  </div>
+
+  <div class="page-container" id="page" style="display: none;"></div>
+
+  <div class="footer" id="footer" style="display: none;">
+    <button id="prevBtn">上一頁</button>
+    <button id="endBtn">結束</button>
+    <button id="nextBtn">下一頁</button>
+  </div>
+
+  <div id="result" style="display: none;"></div>
+  <button id="downloadBtn" style="display: none;">下載結果</button>
+
+  <script>
+    let TOTAL_QUESTIONS = 20;
+    const QUESTIONS_PER_PAGE = 10;
+    let timers = [];
+    let currentPage = 0;
+    let currentRunningIndex = null;
+
+    const setup = document.getElementById('setup');
+    const questionInput = document.getElementById('questionInput');
+    const startBtn = document.getElementById('startBtn');
+    const pageEl = document.getElementById('page');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const endBtn = document.getElementById('endBtn');
+    const footer = document.getElementById('footer');
+    const resultEl = document.getElementById('result');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    function formatTime(sec) {
+      const m = String(Math.floor(sec / 60)).padStart(2, '0');
+      const s = String(sec % 60).padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    function stopTimer(index) {
+      const t = timers[index];
+      if (t.interval) {
+        clearInterval(t.interval);
+        t.interval = null;
+        t.elapsed += Math.floor((Date.now() - t.startTime) / 1000);
+        const el = document.querySelector(`.question[data-index="${index}"]`);
+        if (el) {
+          el.classList.remove('running');
+          el.querySelector('.time').textContent = formatTime(t.elapsed);
+        }
+        if (currentRunningIndex === index) currentRunningIndex = null;
+      }
+    }
+
+    function startTimer(index, el) {
+      const t = timers[index];
+      t.startTime = Date.now();
+      el.classList.add('running');
+      t.interval = setInterval(() => {
+        const elapsed = t.elapsed + Math.floor((Date.now() - t.startTime) / 1000);
+        el.querySelector('.time').textContent = formatTime(elapsed);
+      }, 1000);
+      currentRunningIndex = index;
+    }
+
+    function toggleTimer(index, el) {
+      const isRunning = timers[index].interval !== null;
+      if (currentRunningIndex !== null && currentRunningIndex !== index) stopTimer(currentRunningIndex);
+      if (isRunning) stopTimer(index);
+      else startTimer(index, el);
+    }
+
+    function renderPage() {
+      pageEl.innerHTML = '';
+      const startIdx = currentPage * QUESTIONS_PER_PAGE;
+      const endIdx = Math.min(startIdx + QUESTIONS_PER_PAGE, TOTAL_QUESTIONS);
+
+      for (let i = startIdx; i < endIdx; i++) {
+        const box = document.createElement('div');
+        box.className = 'question';
+        box.dataset.index = i;
+
+        const label = document.createElement('div');
+        label.textContent = `第 ${i + 1} 題`;
+
+        const time = document.createElement('div');
+        time.className = 'time';
+        time.textContent = formatTime(timers[i].elapsed);
+
+        box.appendChild(label);
+        box.appendChild(time);
+        pageEl.appendChild(box);
+
+        if (timers[i].interval) box.classList.add('running');
+
+        box.addEventListener('click', () => toggleTimer(i, box));
+      }
+
+      prevBtn.disabled = currentPage === 0;
+      nextBtn.disabled = currentPage >= Math.floor((TOTAL_QUESTIONS - 1) / QUESTIONS_PER_PAGE);
+    }
+
+    startBtn.addEventListener('click', () => {
+      TOTAL_QUESTIONS = parseInt(questionInput.value) || 20;
+      timers = Array.from({ length: TOTAL_QUESTIONS }, () => ({ startTime: null, elapsed: 0, interval: null }));
+      setup.style.display = 'none';
+      pageEl.style.display = 'block';
+      footer.style.display = 'flex';
+      renderPage();
+    });
+
+    prevBtn.addEventListener('click', () => {
+      if (currentPage > 0) {
+        currentPage--;
+        renderPage();
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      const maxPage = Math.floor((TOTAL_QUESTIONS - 1) / QUESTIONS_PER_PAGE);
+      if (currentPage < maxPage) {
+        currentPage++;
+        renderPage();
+      }
+    });
+
+    endBtn.addEventListener('click', () => {
+      if (currentRunningIndex !== null) stopTimer(currentRunningIndex);
+
+      let message = '';
+      let totalSeconds = 0;
+
+      timers.forEach((t, i) => {
+        message += `第 ${i + 1} 題：${formatTime(t.elapsed)}\n`;
+        totalSeconds += t.elapsed;
+      });
+
+      message += `\n總共花了：${formatTime(totalSeconds)}`;
+      resultEl.textContent = message;
+      resultEl.style.display = 'block';
+      downloadBtn.style.display = 'block';
+      resultEl.scrollIntoView({ behavior: 'smooth' });
+
+      downloadBtn.onclick = () => {
+        const blob = new Blob([message], { type: 'text/plain' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'timing-result.txt';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+    });
+  </script>
+</body>
+</html>

@@ -14,20 +14,22 @@
     .page-container { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
     .question { padding: 12px; background-color: white; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; font-size: 18px; transition: background-color 0.3s; }
     .question.running { background-color: #fff7cc; }
+    /* 隱藏時間數字 */
     .hidden-numbers .time { visibility: hidden; }
 
-    .footer { display: flex; justify-content: space-between; flex-wrap: wrap; padding: 12px 16px; background-color: #fff; border-top: 1px solid #ccc; gap: 8px; }
+    .footer { display: flex; justify-content: space-between; padding: 12px 16px; background-color: #fff; border-top: 1px solid #ccc; gap: 8px; }
     .footer button { flex: 1; padding: 10px 12px; font-size: 16px; border: none; border-radius: 8px; color: #fff; }
-    #resetBtn { background-color: #ffc107; color: #000; }
-    #toggleHideBtn { background-color: #6c757d; }
+    .footer button:disabled { background-color: #aaa; }
     #prevBtn, #nextBtn { background-color: #007bff; }
     #endBtn { background-color: #dc3545; }
+    #toggleHideBtn { background-color: #6c757d; }
 
     #result { background: #fff; margin: 16px; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); white-space: pre-wrap; line-height: 1.6; }
     #downloadBtn, #screenshotBtn { margin: 12px 16px; padding: 12px; color: #fff; border: none; border-radius: 8px; width: calc(100% - 32px); font-size: 16px; }
     #downloadBtn { background-color: #28a745; }
     #screenshotBtn { background-color: #17a2b8; }
   </style>
+  <!-- 引入 html2canvas，用於截圖 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
@@ -43,10 +45,9 @@
     <button id="startBtn">開始</button>
   </div>
 
-  <div class="page-container hidden-numbers" id="page" style="display: none;"></div>
+  <div class="page-container" id="page" style="display: none;"></div>
 
   <div class="footer" id="footer" style="display: none;">
-    <button id="resetBtn">重新設定</button>
     <button id="toggleHideBtn">隱藏時間</button>
     <button id="prevBtn">上一頁</button>
     <button id="endBtn">結束</button>
@@ -73,24 +74,16 @@
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
     const endBtn = document.getElementById('endBtn');
-    const resetBtn = document.getElementById('resetBtn');
-    const toggleHideBtn = document.getElementById('toggleHideBtn');
+    const footer = document.getElementById('footer');
     const resultEl = document.getElementById('result');
     const downloadBtn = document.getElementById('downloadBtn');
     const screenshotBtn = document.getElementById('screenshotBtn');
+    const toggleHideBtn = document.getElementById('toggleHideBtn');
 
     function formatTime(sec) {
       const m = String(Math.floor(sec / 60)).padStart(2, '0');
       const s = String(sec % 60).padStart(2, '0');
       return `${m}:${s}`;
-    }
-
-    function updateNavButtons() {
-      const atStart = currentPage === 0;
-      const atEnd = currentPage >= Math.floor((TOTAL_QUESTIONS - 1) / QUESTIONS_PER_PAGE);
-      const isTiming = currentRunningIndex !== null;
-      prevBtn.disabled = isTiming || atStart;
-      nextBtn.disabled = isTiming || atEnd;
     }
 
     function stopTimer(index) {
@@ -104,8 +97,7 @@
           el.classList.remove('running');
           el.querySelector('.time').textContent = formatTime(t.elapsed);
         }
-        currentRunningIndex = null;
-        updateNavButtons();
+        if (currentRunningIndex === index) currentRunningIndex = null;
       }
     }
 
@@ -118,58 +110,71 @@
         el.querySelector('.time').textContent = formatTime(elapsed);
       }, 1000);
       currentRunningIndex = index;
-      updateNavButtons();
     }
 
     function toggleTimer(index, el) {
+      const isRunning = timers[index].interval !== null;
       if (currentRunningIndex !== null && currentRunningIndex !== index) stopTimer(currentRunningIndex);
-      if (timers[index].interval) stopTimer(index);
+      if (isRunning) stopTimer(index);
       else startTimer(index, el);
     }
 
     function renderPage() {
       pageEl.innerHTML = '';
+      // 依據元素 class 隱藏或顯示時間，不需重新 render 時間功能
       const startIdx = currentPage * QUESTIONS_PER_PAGE;
       const endIdx = Math.min(startIdx + QUESTIONS_PER_PAGE, TOTAL_QUESTIONS);
+
       for (let i = startIdx; i < endIdx; i++) {
         const box = document.createElement('div');
         box.className = 'question';
         box.dataset.index = i;
+
         const label = document.createElement('div');
         label.textContent = `第 ${i + 1} 題`;
-        const timeDiv = document.createElement('div'); timeDiv.className = 'time';
-        timeDiv.textContent = formatTime(timers[i].elapsed);
-        box.append(label, timeDiv);
-        if (timers[i].interval) box.classList.add('running');
-        box.addEventListener('click', () => toggleTimer(i, box));
+
+        const time = document.createElement('div');
+        time.className = 'time';
+        time.textContent = formatTime(timers[i].elapsed);
+
+        box.appendChild(label);
+        box.appendChild(time);
         pageEl.appendChild(box);
+
+        if (timers[i].interval) box.classList.add('running');
+
+        box.addEventListener('click', () => toggleTimer(i, box));
       }
-      updateNavButtons();
+
+      prevBtn.disabled = currentPage === 0;
+      nextBtn.disabled = currentPage >= Math.floor((TOTAL_QUESTIONS - 1) / QUESTIONS_PER_PAGE);
     }
 
     startBtn.addEventListener('click', () => {
       TOTAL_QUESTIONS = parseInt(questionInput.value) || 20;
       TEST_TITLE = titleInput.value.trim() || '未命名測驗';
-      timers = Array.from({ length: TOTAL_QUESTIONS }, () => ({ startTime: 0, elapsed: 0, interval: null }));
+      timers = Array.from({ length: TOTAL_QUESTIONS }, () => ({ startTime: null, elapsed: 0, interval: null }));
       setupEl.style.display = 'none';
-      pageEl.classList.remove('hidden-numbers');
-      pageEl.style.display = 'flex';
-      document.getElementById('footer').style.display = 'flex';
-      currentPage = 0;
+      pageEl.style.display = 'block';
+      footer.style.display = 'flex';
+      pageEl.classList.remove('hidden-numbers'); // 確保初始顯示時間
       renderPage();
     });
 
     prevBtn.addEventListener('click', () => {
-      if (currentRunningIndex !== null) { alert('計時中，請先停止計時再翻頁'); return; }
-      if (currentPage > 0) { currentPage--; renderPage(); }
+      if (currentPage > 0) {
+        currentPage--; renderPage();
+      }
     });
 
     nextBtn.addEventListener('click', () => {
-      if (currentRunningIndex !== null) { alert('計時中，請先停止計時再翻頁'); return; }
       const maxPage = Math.floor((TOTAL_QUESTIONS - 1) / QUESTIONS_PER_PAGE);
-      if (currentPage < maxPage) { currentPage++; renderPage(); }
+      if (currentPage < maxPage) {
+        currentPage++; renderPage();
+      }
     });
 
+    // 切換隱藏/顯示時間，但不重繪題目，保持計時進行
     toggleHideBtn.addEventListener('click', () => {
       const hidden = pageEl.classList.toggle('hidden-numbers');
       toggleHideBtn.textContent = hidden ? '顯示時間' : '隱藏時間';
@@ -177,10 +182,17 @@
 
     endBtn.addEventListener('click', () => {
       if (currentRunningIndex !== null) stopTimer(currentRunningIndex);
+
       let message = `📘 測驗名稱：${TEST_TITLE}\n\n`;
-      let totalSec = 0;
-      timers.forEach((t, i) => { message += `第 ${i + 1} 題：${formatTime(t.elapsed)}\n`; totalSec += t.elapsed; });
-      message += `\n✅ 總共花了：${formatTime(totalSec)}`;
+      let totalSeconds = 0;
+
+      timers.forEach((t, i) => {
+        message += `第 ${i + 1} 題：${formatTime(t.elapsed)}\n`;
+        totalSeconds += t.elapsed;
+      });
+
+      message += `\n✅ 總共花了：${formatTime(totalSeconds)}`;
+
       resultEl.textContent = message;
       resultEl.style.display = 'block';
       downloadBtn.style.display = 'block';
@@ -189,31 +201,22 @@
     });
 
     downloadBtn.addEventListener('click', () => {
-      const safe = TEST_TITLE.replace(/[^一-龥\w]/g, '_');
+      const safeName = TEST_TITLE.replace(/[^一-龥\w]/g, '_');
       const blob = new Blob([resultEl.textContent], { type: 'text/plain' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${safe}-結果.txt`;
-      document.body.append(a); a.click(); a.remove();
+      const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
+      link.download = `${safeName}-結果.txt`;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
     });
 
     screenshotBtn.addEventListener('click', () => {
-      html2canvas(resultEl).then(canvas => canvas.toBlob(blob => {
-        const safe = TEST_TITLE.replace(/[^一-龥\w]/g, '_');
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${safe}-結果.png`;
-        document.body.append(a); a.click(); a.remove();
-      }));
-    });
-
-    resetBtn.addEventListener('click', () => {
-      timers.forEach(t => t.interval && clearInterval(t.interval));
-      currentRunningIndex = null;
-      currentPage = 0;
-      pageEl.style.display = 'none';
-      document.getElementById('footer').style.display = 'none';
-      resultEl.style.display = 'none';
-      downloadBtn.style.display = 'none';
-      screenshotBtn.style.display = 'none';
-      pageEl.innerHTML = '';
-      setupEl.style.display = 'block';
+      html2canvas(resultEl).then(canvas => {
+        canvas.toBlob(blob => {
+          const safeName = TEST_TITLE.replace(/[^一-龥\w]/g, '_');
+          const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
+          link.download = `${safeName}-結果.png`;
+          document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        });
+      });
     });
   </script>
 </body>

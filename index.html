@@ -34,7 +34,7 @@
   <div id="setup">
     <div>
       <label>測驗名稱：</label>
-      <input type="text" id="titleInput" placeholder="如：自然小考0420" />
+      <input type="text" id="titleInput" placeholder="如：自然0420" />
     </div>
     <div>
       <label>題目總數：</label>
@@ -47,9 +47,9 @@
 
   <div class="footer" id="footer" style="display: none;">
     <button id="resetBtn">重新設定</button>
+    <button id="endBtn">結束</button>
     <button id="toggleHideBtn">隱藏時間</button>
     <button id="prevBtn">上一頁</button>
-    <button id="endBtn">結束</button>
     <button id="nextBtn">下一頁</button>
   </div>
 
@@ -177,7 +177,7 @@
 
     endBtn.addEventListener('click', () => {
       if (currentRunningIndex !== null) stopTimer(currentRunningIndex);
-      let message = `📘 測驗名稱：${TEST_TITLE}\n\n`;
+      let message = `測驗名稱：${TEST_TITLE}\n\n`;
       let totalSec = 0;
       timers.forEach((t, i) => { message += `第 ${i + 1} 題：${formatTime(t.elapsed)}\n`; totalSec += t.elapsed; });
       message += `\n✅ 總共花了：${formatTime(totalSec)}`;
